@@ -20,9 +20,9 @@ RenderSettings:
   m_FogDensity: 0.01
   m_LinearFogStart: 0
   m_LinearFogEnd: 300
-  m_AmbientSkyColor: {r: 0.62, g: 0.64, b: 0.78, a: 1}
-  m_AmbientEquatorColor: {r: 0.48, g: 0.45, b: 0.55, a: 1}
-  m_AmbientGroundColor: {r: 0.22, g: 0.2, b: 0.26, a: 1}
+  m_AmbientSkyColor: {r: 0.36552152, g: 0.40608147, b: 0.6981132, a: 1}
+  m_AmbientEquatorColor: {r: 0.26459223, g: 0.11801354, b: 0.6415094, a: 1}
+  m_AmbientGroundColor: {r: 0.16853562, g: 0.14431292, b: 0.21698111, a: 1}
   m_AmbientIntensity: 1
   m_AmbientMode: 1
   m_SubtractiveShadowColor: {r: 0.42, g: 0.478, b: 0.627, a: 1}
@@ -93,7 +93,7 @@ LightmapSettings:
     m_ExportTrainingData: 0
     m_TrainingDataDestination: TrainingData
     m_LightProbeSampleCountMultiplier: 4
-  m_LightingDataAsset: {fileID: 20201, guid: 0000000000000000f000000000000000, type: 0}
+  m_LightingDataAsset: {fileID: 112000000, guid: 8634cc07baad7904d8230acb151f244d, type: 2}
   m_LightingSettings: {fileID: 0}
 --- !u!196 &4
 NavMeshSettings:
@@ -234,7 +234,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: c7e3b706a5cdb4f4bae68d9996ba04c1, type: 2}
+  - {fileID: 2100000, guid: 07071936b3b2f154fa37826060d72131, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -649,8 +649,8 @@ Camera:
   m_GameObject: {fileID: 2130616560}
   m_Enabled: 1
   serializedVersion: 2
-  m_ClearFlags: 2
-  m_BackGroundColor: {r: 0.78, g: 0.76, b: 0.92, a: 1}
+  m_ClearFlags: 1
+  m_BackGroundColor: {r: 0, g: 0, b: 0, a: 1}
   m_projectionMatrixMode: 1
   m_GateFitMode: 2
   m_FOVAxisMode: 0
