@@ -40,10 +40,11 @@ public class MarbleBall : MonoBehaviour
     [Min(1f)] public float maxAngularVelocity = DefaultMaxAngularVelocity;
 
     [Header("Respawn")]
-    [Tooltip("Place the kill height below the lowest RibbonTrack in the scene when play starts.")]
+    [Tooltip("On play, derive the kill zone from all RibbonTracks: respawn when the ball leaves their combined " +
+             "bounds by more than Kill Margin in any direction (also catches falling 'up' under flipped gravity).")]
     public bool autoKillHeight = true;
 
-    [Tooltip("How far below the lowest track the ball may fall before respawning (auto mode).")]
+    [Tooltip("How far outside the tracks' bounds the ball may travel before respawning (auto mode).")]
     [Min(0f)] public float killMargin = 25f;
 
     [Tooltip("Falling below this world height resets the ball to where it started. Overwritten when Auto Kill Height is on.")]
@@ -54,8 +55,12 @@ public class MarbleBall : MonoBehaviour
     PhysicsMaterial material;
     Vector3 spawnPosition;
     Quaternion spawnRotation;
+    Bounds playBounds;
+    bool hasPlayBounds;
 
     public Rigidbody Body => body;
+
+    public event System.Action Respawned;
 
     void Awake()
     {
@@ -79,10 +84,14 @@ public class MarbleBall : MonoBehaviour
         if (tracks.Length == 0)
             return;
 
-        float lowest = float.MaxValue;
+        Bounds bounds = tracks[0].GetComponent<MeshRenderer>().bounds;
         foreach (var track in tracks)
-            lowest = Mathf.Min(lowest, track.GetComponent<MeshRenderer>().bounds.min.y);
-        killHeight = lowest - killMargin;
+            bounds.Encapsulate(track.GetComponent<MeshRenderer>().bounds);
+        bounds.Expand(killMargin * 2f);
+
+        playBounds = bounds;
+        hasPlayBounds = true;
+        killHeight = bounds.min.y;
     }
 
     void OnValidate()
@@ -93,7 +102,7 @@ public class MarbleBall : MonoBehaviour
 
     void FixedUpdate()
     {
-        if (body.position.y < killHeight)
+        if (body.position.y < killHeight || (hasPlayBounds && !playBounds.Contains(body.position)))
             Respawn();
     }
 
@@ -133,5 +142,6 @@ public class MarbleBall : MonoBehaviour
         body.position = spawnPosition;
         body.rotation = spawnRotation;
         transform.SetPositionAndRotation(spawnPosition, spawnRotation);
+        Respawned?.Invoke();
     }
 }

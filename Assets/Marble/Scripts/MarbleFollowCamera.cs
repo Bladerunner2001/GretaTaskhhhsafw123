@@ -34,7 +34,17 @@ public class MarbleFollowCamera : MonoBehaviour
     [Tooltip("Extra smoothing on the visual tilt, so 50 Hz physics steps don't show up as stepping.")]
     [Min(0f)] public float tiltSmoothTime = 0.08f;
 
+    [Header("Free Gravity Mode")]
+    [Tooltip("Used when the tilt controller is in Free mode: how quickly the camera's up follows the current " +
+             "anti-gravity direction. The camera is unclamped there, so the world can appear fully upside down.")]
+    [Min(0.001f)] public float freeUpSmoothTime = 0.12f;
+    [Tooltip("Gravity changes larger than this in one frame (e.g. respawn) snap the camera instead of swinging.")]
+    [Range(30f, 180f)] public float freeSnapAngle = 120f;
+
     float yaw;
+    bool freeActive;
+    Vector3 freeUp = Vector3.up;
+    Vector3 freeHeading = Vector3.forward;
     Vector3 basePosition;
     Vector3 positionVelocity;
     float pitch;
@@ -44,6 +54,11 @@ public class MarbleFollowCamera : MonoBehaviour
 
     public Vector3 PlanarForward => Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
     public Vector3 PlanarRight => Quaternion.Euler(0f, yaw, 0f) * Vector3.right;
+
+    /// <summary>Direction the camera looks along the ground: world-planar in Classic mode, gravity-relative in Free mode.</summary>
+    public Vector3 HeadingForward => freeActive ? freeHeading : PlanarForward;
+
+    bool FreeMode => tiltController != null && tiltController.mode == MarbleTiltController.GravityMode.Free;
 
     /// <summary>Current visual tilt in degrees, after scaling and clamping.</summary>
     public float Pitch => pitch;
@@ -65,6 +80,15 @@ public class MarbleFollowCamera : MonoBehaviour
 
         // The interpolated transform, not Rigidbody.position, or the ball jitters between physics steps.
         Vector3 pivot = target.transform.position;
+
+        if (FreeMode != freeActive)
+            SwitchMode(FreeMode);
+
+        if (freeActive)
+        {
+            UpdateFree(pivot);
+            return;
+        }
 
         UpdateYaw();
         UpdateTilt();
@@ -114,5 +138,68 @@ public class MarbleFollowCamera : MonoBehaviour
     Vector3 DesiredBasePosition(Vector3 pivot)
     {
         return pivot - PlanarForward * distance + Vector3.up * height;
+    }
+
+    void SwitchMode(bool free)
+    {
+        freeActive = free;
+        if (free)
+        {
+            freeUp = Vector3.up;
+            freeHeading = PlanarForward;
+            return;
+        }
+
+        Vector3 planar = Vector3.ProjectOnPlane(freeHeading, Vector3.up);
+        if (planar.sqrMagnitude > 1e-4f)
+            yaw = Mathf.Atan2(planar.x, planar.z) * Mathf.Rad2Deg;
+        pitch = roll = pitchVelocity = rollVelocity = 0f;
+    }
+
+    // Up and heading are carried forward incrementally (each frame rotated by only the change since the
+    // last frame), because an absolute rotation from world up is undefined at exactly 180°.
+    void UpdateFree(Vector3 pivot)
+    {
+        Vector3 targetUp = tiltController.Up;
+        float dt = Time.deltaTime;
+
+        Vector3 newUp;
+        bool snap = Vector3.Angle(freeUp, targetUp) > freeSnapAngle;
+        if (snap)
+            newUp = targetUp;
+        else
+            newUp = Vector3.Slerp(freeUp, targetUp, 1f - Mathf.Exp(-dt / freeUpSmoothTime)).normalized;
+
+        freeHeading = Quaternion.FromToRotation(freeUp, newUp) * freeHeading;
+        freeUp = newUp;
+        freeHeading = Vector3.ProjectOnPlane(freeHeading, freeUp);
+        if (freeHeading.sqrMagnitude < 1e-6f)
+            freeHeading = Vector3.ProjectOnPlane(transform.forward, freeUp);
+        freeHeading.Normalize();
+
+        Vector3 planarVelocity = Vector3.ProjectOnPlane(target.linearVelocity, freeUp);
+        if (planarVelocity.magnitude > minSpeedForYaw)
+        {
+            float turn = Vector3.SignedAngle(freeHeading, planarVelocity, freeUp);
+            float k = 1f - Mathf.Exp(-yawFollowSpeed * dt);
+            freeHeading = Quaternion.AngleAxis(turn * k, freeUp) * freeHeading;
+        }
+
+        Vector3 desired = pivot - freeHeading * distance + freeUp * height;
+        if (snap)
+        {
+            basePosition = desired;
+            positionVelocity = Vector3.zero;
+        }
+        else
+        {
+            basePosition = Vector3.SmoothDamp(basePosition, desired, ref positionVelocity, positionSmoothTime);
+        }
+
+        Vector3 toBall = pivot - basePosition;
+        if (toBall.sqrMagnitude < 1e-6f)
+            return;
+
+        transform.SetPositionAndRotation(basePosition, Quaternion.LookRotation(toBall, freeUp));
     }
 }
