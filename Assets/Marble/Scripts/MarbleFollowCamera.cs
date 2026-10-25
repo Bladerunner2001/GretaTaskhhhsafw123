@@ -22,6 +22,11 @@ public class MarbleFollowCamera : MonoBehaviour
     [Min(0f)] public float yawFollowSpeed = 2.5f;
     [Tooltip("Below this horizontal speed the camera keeps its current heading.")]
     [Min(0f)] public float minSpeedForYaw = 1.5f;
+    [Tooltip("Speed at which the camera swings at full Yaw Follow Speed. Between Min Speed For Yaw and this, " +
+             "the swing fades in gradually instead of switching on.")]
+    [Min(0f)] public float fullYawSpeed = 5f;
+    [Tooltip("Smoothing time on the travel direction the camera follows; filters out bumps and landings.")]
+    [Min(0f)] public float velocitySmoothTime = 0.25f;
 
     [Header("Visual Tilt")]
     [Tooltip("Fraction of the gravity pitch (forward/back) mirrored by the camera.")]
@@ -41,7 +46,26 @@ public class MarbleFollowCamera : MonoBehaviour
     [Tooltip("Gravity changes larger than this in one frame (e.g. respawn) snap the camera instead of swinging.")]
     [Range(30f, 180f)] public float freeSnapAngle = 120f;
 
+    [Header("Occlusion")]
+    [Tooltip("Pull the camera in front of level geometry that would block the view of the ball.")]
+    public bool avoidOcclusion = true;
+    public LayerMask occlusionLayers = ~0;
+    [Tooltip("Radius of the probe swept from the ball to the camera; roughly the clearance the camera keeps from walls.")]
+    [Min(0.01f)] public float occlusionProbeRadius = 0.25f;
+    [Tooltip("Closest the camera may be pulled towards the ball.")]
+    [Min(0f)] public float minOcclusionDistance = 0.8f;
+    [Tooltip("Time to ease back out once the view is clear. Pulling in is always instant.")]
+    [Min(0f)] public float occlusionReturnTime = 0.3f;
+    [Tooltip("Sets Physics.queriesHitBackfaces (global) so the probe also detects the ribbon from its underside.")]
+    public bool hitBackfaces = true;
+
+    readonly RaycastHit[] occlusionHits = new RaycastHit[16];
+    float occlusionDistance = float.PositiveInfinity;
+    float occlusionVelocity;
+
     float yaw;
+    Vector3 smoothedVelocity;
+    Vector3 smoothedVelocityRate;
     bool freeActive;
     Vector3 freeUp = Vector3.up;
     Vector3 freeHeading = Vector3.forward;
@@ -64,6 +88,12 @@ public class MarbleFollowCamera : MonoBehaviour
     public float Pitch => pitch;
     public float Roll => roll;
 
+    void Awake()
+    {
+        if (hitBackfaces)
+            Physics.queriesHitBackfaces = true;
+    }
+
     void Start()
     {
         Vector3 forward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
@@ -80,6 +110,8 @@ public class MarbleFollowCamera : MonoBehaviour
 
         // The interpolated transform, not Rigidbody.position, or the ball jitters between physics steps.
         Vector3 pivot = target.transform.position;
+
+        smoothedVelocity = Vector3.SmoothDamp(smoothedVelocity, target.linearVelocity, ref smoothedVelocityRate, velocitySmoothTime);
 
         if (FreeMode != freeActive)
             SwitchMode(FreeMode);
@@ -100,17 +132,66 @@ public class MarbleFollowCamera : MonoBehaviour
         if (offset.sqrMagnitude < 1e-6f)
             return;
 
-        transform.SetPositionAndRotation(pivot + offset, Quaternion.LookRotation(-offset, tilt * Vector3.up));
+        transform.SetPositionAndRotation(ResolveOcclusion(pivot, pivot + offset), Quaternion.LookRotation(-offset, tilt * Vector3.up));
+    }
+
+    /// <summary>Moves the camera along the ball-to-camera line so no geometry sits between them.</summary>
+    Vector3 ResolveOcclusion(Vector3 pivot, Vector3 cameraPosition)
+    {
+        Vector3 offset = cameraPosition - pivot;
+        float fullDistance = offset.magnitude;
+        if (!avoidOcclusion || fullDistance < 1e-4f)
+        {
+            occlusionDistance = fullDistance;
+            occlusionVelocity = 0f;
+            return cameraPosition;
+        }
+
+        Vector3 direction = offset / fullDistance;
+        float allowed = fullDistance;
+
+        int count = Physics.SphereCastNonAlloc(pivot, occlusionProbeRadius, direction, occlusionHits,
+            fullDistance, occlusionLayers, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < count; i++)
+        {
+            RaycastHit hit = occlusionHits[i];
+            // Distance 0 means the probe started inside that collider (e.g. the ball itself), not a blocker.
+            if (hit.distance <= 0f || hit.rigidbody == target)
+                continue;
+            allowed = Mathf.Min(allowed, hit.distance);
+        }
+
+        allowed = Mathf.Max(allowed, Mathf.Min(minOcclusionDistance, fullDistance));
+
+        if (allowed < occlusionDistance)
+        {
+            occlusionDistance = allowed;
+            occlusionVelocity = 0f;
+        }
+        else
+        {
+            occlusionDistance = Mathf.SmoothDamp(occlusionDistance, allowed, ref occlusionVelocity, occlusionReturnTime);
+        }
+
+        return pivot + direction * Mathf.Min(occlusionDistance, fullDistance);
     }
 
     void UpdateYaw()
     {
-        Vector3 planarVelocity = Vector3.ProjectOnPlane(target.linearVelocity, Vector3.up);
-        if (planarVelocity.magnitude <= minSpeedForYaw)
+        Vector3 planarVelocity = Vector3.ProjectOnPlane(smoothedVelocity, Vector3.up);
+        float k = YawBlend(planarVelocity.magnitude);
+        if (k <= 0f)
             return;
 
         float targetYaw = Mathf.Atan2(planarVelocity.x, planarVelocity.z) * Mathf.Rad2Deg;
-        yaw = Mathf.LerpAngle(yaw, targetYaw, 1f - Mathf.Exp(-yawFollowSpeed * Time.deltaTime));
+        yaw = Mathf.LerpAngle(yaw, targetYaw, k);
+    }
+
+    /// <summary>Per-frame blend factor toward the travel direction, faded in by speed.</summary>
+    float YawBlend(float speed)
+    {
+        float weight = Mathf.InverseLerp(minSpeedForYaw, Mathf.Max(fullYawSpeed, minSpeedForYaw + 0.01f), speed);
+        return 1f - Mathf.Exp(-yawFollowSpeed * weight * Time.deltaTime);
     }
 
     void UpdateTilt()
@@ -177,11 +258,11 @@ public class MarbleFollowCamera : MonoBehaviour
             freeHeading = Vector3.ProjectOnPlane(transform.forward, freeUp);
         freeHeading.Normalize();
 
-        Vector3 planarVelocity = Vector3.ProjectOnPlane(target.linearVelocity, freeUp);
-        if (planarVelocity.magnitude > minSpeedForYaw)
+        Vector3 planarVelocity = Vector3.ProjectOnPlane(smoothedVelocity, freeUp);
+        float k = YawBlend(planarVelocity.magnitude);
+        if (k > 0f)
         {
             float turn = Vector3.SignedAngle(freeHeading, planarVelocity, freeUp);
-            float k = 1f - Mathf.Exp(-yawFollowSpeed * dt);
             freeHeading = Quaternion.AngleAxis(turn * k, freeUp) * freeHeading;
         }
 
@@ -200,6 +281,6 @@ public class MarbleFollowCamera : MonoBehaviour
         if (toBall.sqrMagnitude < 1e-6f)
             return;
 
-        transform.SetPositionAndRotation(basePosition, Quaternion.LookRotation(toBall, freeUp));
+        transform.SetPositionAndRotation(ResolveOcclusion(pivot, basePosition), Quaternion.LookRotation(toBall, freeUp));
     }
 }

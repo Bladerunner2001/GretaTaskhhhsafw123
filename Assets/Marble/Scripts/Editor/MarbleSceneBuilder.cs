@@ -122,6 +122,8 @@ public static class MarbleSceneBuilder
         follow.target = ball;
         follow.tiltController = tilt;
         tilt.followCamera = follow;
+
+        cameraObject.AddComponent<MarbleOcclusionCutout>().ball = ball.transform;
     }
 
     static Material GetOrCreateCheckerMaterial(string path, Shader shader, Color a, Color b, Vector2 tiling,

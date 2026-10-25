@@ -190,8 +190,8 @@ MonoBehaviour:
   followCamera: {fileID: 2130616561}
   mode: 1
   freeTiltSpeed: 60
-  gravityStrength: 9.81
-  maxTiltDegrees: 26
+  gravityStrength: 6
+  maxTiltDegrees: 15
   inputSmoothTime: 0.12
   maxInputSpeed: 10
 --- !u!54 &301583287
@@ -553,16 +553,16 @@ MonoBehaviour:
     bankDegrees: -15
   - position: {x: 11.8126745, y: -1.9101119, z: 31.0312}
     bankDegrees: -20
-  - position: {x: 29.521526, y: -23.018501, z: 28}
-    bankDegrees: -11.673068
-  - position: {x: 25.40298, y: -8.000005, z: 16}
-    bankDegrees: 0.9362817
-  - position: {x: 27.397522, y: -5.794729, z: 4}
-    bankDegrees: 15
-  - position: {x: 21.48952, y: -12.000005, z: -2}
-    bankDegrees: 25
-  - position: {x: 12.000002, y: -23.994667, z: 4}
-    bankDegrees: 15
+  - position: {x: 20.40285, y: -17.574625, z: 27.836163}
+    bankDegrees: 17.614899
+  - position: {x: 21.928627, y: -26.84046, z: 22.178623}
+    bankDegrees: 37.48946
+  - position: {x: 21.436546, y: -30.302835, z: 12.912996}
+    bankDegrees: 29.817055
+  - position: {x: 20.591824, y: -21.215532, z: 4.263456}
+    bankDegrees: 6.3432865
+  - position: {x: 11.357398, y: -19.13834, z: 2.8944488}
+    bankDegrees: 10.70971
   - position: {x: 8, y: -18, z: 16}
     bankDegrees: 5
   - position: {x: 10.000003, y: -14.41204, z: 30}
@@ -811,13 +811,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1271163962}
   serializedVersion: 2
-  m_LocalRotation: {x: -0.55921847, y: -0, z: -0, w: 0.8290204}
-  m_LocalPosition: {x: -16.4, y: -20.7, z: 6.3}
+  m_LocalRotation: {x: 0.23324089, y: -0, z: -0, w: 0.972419}
+  m_LocalPosition: {x: -10.199999, y: 1.6969757, z: 14.223348}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 99311238}
-  m_LocalEulerAnglesHint: {x: -68.004, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 26.976, y: 0, z: 0}
 --- !u!114 &1271163964
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -983,6 +983,7 @@ GameObject:
   - component: {fileID: 2130616562}
   - component: {fileID: 2130616561}
   - component: {fileID: 2130616565}
+  - component: {fileID: 2130616566}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -1009,6 +1010,8 @@ MonoBehaviour:
   positionSmoothTime: 0.15
   yawFollowSpeed: 2.5
   minSpeedForYaw: 1.5
+  fullYawSpeed: 5
+  velocitySmoothTime: 0.25
   pitchAmount: 0.6
   rollAmount: 0.6
   maxPitchDegrees: 15
@@ -1016,6 +1019,14 @@ MonoBehaviour:
   tiltSmoothTime: 0.08
   freeUpSmoothTime: 0.12
   freeSnapAngle: 120
+  avoidOcclusion: 1
+  occlusionLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  occlusionProbeRadius: 0.25
+  minOcclusionDistance: 4
+  occlusionReturnTime: 0.4
+  hitBackfaces: 1
 --- !u!81 &2130616562
 AudioListener:
   m_ObjectHideFlags: 0
@@ -1134,6 +1145,23 @@ MonoBehaviour:
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
   m_Version: 2
+--- !u!114 &2130616566
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2130616560}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 93c42ebff950d9546a3ac3575d86e178, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MarbleOcclusionCutout
+  ball: {fileID: 0}
+  radius: 1.5
+  edgeSoftness: 0.4
+  depthMargin: 1.5
+  depthFade: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

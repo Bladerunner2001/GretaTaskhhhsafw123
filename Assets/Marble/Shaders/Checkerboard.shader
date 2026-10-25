@@ -8,6 +8,7 @@ Shader "Marble/Checkerboard"
         _Smoothness ("Smoothness", Range(0, 1)) = 0.35
         _SpecularStrength ("Specular Strength", Range(0, 1)) = 0.15
         [Enum(UnityEngine.Rendering.CullMode)] _Cull ("Cull", Float) = 0
+        _OcclusionCutout ("Occlusion Cutout", Range(0, 1)) = 1
     }
 
     SubShader
@@ -23,7 +24,43 @@ Shader "Marble/Checkerboard"
             float4 _Tiling;
             half _Smoothness;
             half _SpecularStrength;
+            half _OcclusionCutout;
         CBUFFER_END
+
+        // Set globally by MarbleOcclusionCutout.
+        float4 _MarbleCutoutPosition; // xyz = ball world position, w = 1 when active
+        float4 _MarbleCutoutParams;   // x = radius at ball distance, y = edge softness, z = depth margin, w = depth fade
+
+        // Dithered see-through hole around the ball for geometry between the camera and the ball.
+        // Must run identically in every pass that writes depth, or the depth prepass still hides the ball.
+        void ClipOcclusionCutout(float3 positionWS, float2 pixel)
+        {
+            if (_MarbleCutoutPosition.w < 0.5 || _OcclusionCutout <= 0.0)
+                return;
+
+            float3 cameraWS = GetCameraPositionWS();
+            float3 toBall = _MarbleCutoutPosition.xyz - cameraWS;
+            float ballDistance = length(toBall);
+            float3 axis = toBall / max(ballDistance, 1e-4);
+
+            float3 toFragment = positionWS - cameraWS;
+            float along = dot(toFragment, axis);
+            if (along <= 1e-3)
+                return;
+
+            // Perpendicular offset rescaled to the ball's distance, so the hole is a cone (a circle on screen).
+            float radial = length(toFragment - axis * along) * ballDistance / along;
+            float radius = _MarbleCutoutParams.x;
+            float edge = max(radius * _MarbleCutoutParams.y, 1e-3);
+            float radialMask = 1.0 - smoothstep(radius - edge, radius, radial);
+
+            float nearLimit = ballDistance - _MarbleCutoutParams.z;
+            float depthMask = 1.0 - smoothstep(nearLimit - _MarbleCutoutParams.w, nearLimit, along);
+
+            float cut = radialMask * depthMask * _OcclusionCutout;
+            float noise = frac(52.9829189 * frac(dot(pixel, float2(0.06711056, 0.00583715))));
+            clip(noise - cut);
+        }
         ENDHLSL
 
         Pass
@@ -82,6 +119,8 @@ Shader "Marble/Checkerboard"
 
             half4 Frag(Varyings input, FRONT_FACE_TYPE frontFace : FRONT_FACE_SEMANTIC) : SV_Target
             {
+                ClipOcclusionCutout(input.positionWS, input.positionCS.xy);
+
                 half3 albedo = lerp(_ColorA.rgb, _ColorB.rgb, FilteredChecker(input.uv));
 
                 float3 normalWS = normalize(input.normalWS) * IS_FRONT_VFACE(frontFace, 1.0, -1.0);
@@ -167,13 +206,23 @@ Shader "Marble/Checkerboard"
             #pragma vertex DepthVert
             #pragma fragment DepthFrag
 
-            float4 DepthVert(float4 positionOS : POSITION) : SV_POSITION
+            struct DepthVaryings
             {
-                return TransformObjectToHClip(positionOS.xyz);
+                float4 positionCS : SV_POSITION;
+                float3 positionWS : TEXCOORD0;
+            };
+
+            DepthVaryings DepthVert(float4 positionOS : POSITION)
+            {
+                DepthVaryings output;
+                output.positionWS = TransformObjectToWorld(positionOS.xyz);
+                output.positionCS = TransformWorldToHClip(output.positionWS);
+                return output;
             }
 
-            half4 DepthFrag(float4 positionCS : SV_POSITION) : SV_Target
+            half4 DepthFrag(DepthVaryings input) : SV_Target
             {
+                ClipOcclusionCutout(input.positionWS, input.positionCS.xy);
                 return 0;
             }
             ENDHLSL
